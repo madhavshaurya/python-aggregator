@@ -1,15 +1,30 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Header, HTTPException
 from collections import defaultdict
-from datetime import datetime
+import os
 
 app = FastAPI(
     title="Sales Aggregation Service",
     version="1.0.0"
 )
 
+API_KEY = os.getenv("API_KEY")  # set in Render dashboard
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 @app.post("/api/aggregate-invoices")
-async def aggregate_sales(request: Request):
+async def aggregate_sales(
+    request: Request,
+    x_api_key: str = Header(None)
+):
+    if API_KEY and x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     sales = await request.json()
+
+    if not isinstance(sales, list):
+        raise HTTPException(status_code=400, detail="Expected list of sales documents")
 
     invoice_count = len(sales)
     total_sales = 0.0
@@ -48,7 +63,10 @@ async def aggregate_sales(request: Request):
         reverse=True
     )[:3]
 
-    top_store = max(store_revenue, key=store_revenue.get) if store_revenue else "data not available"
+    top_store = (
+        max(store_revenue, key=store_revenue.get)
+        if store_revenue else "data not available"
+    )
 
     return {
         "invoice_count": invoice_count,
